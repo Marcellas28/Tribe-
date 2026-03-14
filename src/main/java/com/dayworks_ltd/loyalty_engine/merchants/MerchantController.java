@@ -1,0 +1,103 @@
+package com.dayworks_ltd.loyalty_engine.merchants;
+
+import com.dayworks_ltd.loyalty_engine.auth.DTO.UserDto;
+import com.dayworks_ltd.loyalty_engine.auth.enums.Status;
+import com.dayworks_ltd.loyalty_engine.auth.enums.UserRole;
+import com.dayworks_ltd.loyalty_engine.auth.services.UserService;
+import com.dayworks_ltd.loyalty_engine.common.ApiResponseBody;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import lombok.extern.slf4j.Slf4j;
+
+
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/merchants")
+public class MerchantController {
+
+    private final MerchantService merchantService;
+    private final UserService userService;
+
+
+    public MerchantController(MerchantService merchantService, UserService userService) {
+        this.merchantService = merchantService;
+        this.userService = userService;
+    }
+
+    @PostMapping("/createMerchant")
+    public ResponseEntity<ApiResponseBody> createMerchant(@Valid @RequestBody Merchant merchant) {
+        log.info("Received request to create merchant: {}", merchant.getBusinessName());
+        System.out.println("Received request to create merchant: " + merchant.getBusinessName());
+        try {
+            Merchant created = merchantService.createMerchant(merchant);
+            userService.addUser(new UserDto(merchant.getBusinessName(),
+                    merchant.getBusinessName() + "123",
+                    UserRole.MERCHANT.name(),
+                    Status.ACTIVE.name(), created.getId().toString()));
+            log.info("Merchant created successfully with ID: {}", created.getId());
+            System.out.println("Merchant created successfully with ID: " + created.getId());
+
+            ApiResponseBody response = ApiResponseBody.builder()
+                    .status("200")
+                    .message("success")
+                    .respObject(created)
+                    .build();
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+        } catch (IllegalArgumentException e) {
+            log.error("Failed to create merchant: {}", e.getMessage());
+            System.out.println("Failed to create merchant: " + e.getMessage());
+
+            ApiResponseBody response = ApiResponseBody.builder()
+                    .status("400")
+                    .message(e.getMessage()) // Use specific error message
+                    .respObject(null)
+                    .build();
+            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            log.error("Failed to create merchant: {}", e.getMessage());
+            System.out.println("Failed to create merchant: " + e.getMessage());
+
+            ApiResponseBody response = ApiResponseBody.builder()
+                    .status("500")
+                    .message(e.getMessage()) // Use specific error message
+                    .respObject(null)
+                    .build();
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping
+    public ResponseEntity<List<Merchant>> getAllMerchants() {
+        return ResponseEntity.ok(merchantService.getAllMerchants());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Merchant> getMerchantById(@PathVariable Long id) {
+        return merchantService.getMerchantById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/till/{tillNumber}")
+    public ResponseEntity<Merchant> getMerchantByTill(@PathVariable String tillNumber) {
+        return merchantService.getMerchantByTillNumber(tillNumber)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Merchant> updateMerchant(@PathVariable Long id, @Valid @RequestBody Merchant merchant) {
+        return ResponseEntity.ok(merchantService.updateMerchant(id, merchant));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteMerchant(@PathVariable Long id) {
+        merchantService.deleteMerchant(id);
+        return ResponseEntity.noContent().build();
+    }
+}
