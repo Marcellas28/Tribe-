@@ -3,6 +3,7 @@ package com.dayworks_ltd.loyalty_engine.inventory.models;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 
 @Entity
@@ -20,7 +21,7 @@ public class DefaultProduct {
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
 
-    @Column(name = "product_code", nullable = false, unique = true, length = 36)
+    @Column(name = "product_code", nullable = false, unique = true, length = 6)
     private String productCode;
 
     @Column(name = "volume_ml", nullable = false)
@@ -35,7 +36,7 @@ public class DefaultProduct {
     @PrePersist
     public void onCreate() {
         if (productCode == null || productCode.isBlank()) {
-            productCode = java.util.UUID.randomUUID().toString();
+            productCode = generateCode();
         }
         createdAt = LocalDateTime.now();
         updatedAt = createdAt;
@@ -44,5 +45,16 @@ public class DefaultProduct {
     @PreUpdate
     public void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    private static final String CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private String generateCode() {
+        StringBuilder sb = new StringBuilder(6);
+        for (int i = 0; i < 6; i++) {
+            sb.append(CODE_CHARS.charAt(RANDOM.nextInt(CODE_CHARS.length())));
+        }
+        return sb.toString();
     }
 }

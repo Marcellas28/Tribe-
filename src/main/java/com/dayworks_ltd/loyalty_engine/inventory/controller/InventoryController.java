@@ -7,6 +7,7 @@ import com.dayworks_ltd.loyalty_engine.auth.services.CustomUserDetailsService;
 import com.dayworks_ltd.loyalty_engine.auth.services.JWTService;
 import com.dayworks_ltd.loyalty_engine.campaign.service.Campaign;
 import com.dayworks_ltd.loyalty_engine.campaigns.CampaignService;
+import com.dayworks_ltd.loyalty_engine.inventory.DTO.DefaultProductDto;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleItemRequest;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleRequest;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.StockRequest;
@@ -107,8 +108,16 @@ public class InventoryController {
 
     // --- Default product templates ---
     @GetMapping("/product-defaults")
-    public ResponseEntity<List<DefaultProduct>> getAllDefaultProducts() {
-        return ResponseEntity.ok(defaultProductRepository.findAll());
+    public ResponseEntity<List<DefaultProductDto>> getAllDefaultProducts() {
+        List<DefaultProductDto> list = defaultProductRepository.findAll()
+                .stream()
+                .map(p -> DefaultProductDto.builder()
+                        .productName(p.getProductName())
+                        .productCode(p.getProductCode())
+                        .volumeMl(p.getVolume_Ml())
+                        .build())
+                .toList();
+        return ResponseEntity.ok(list);
     }
     
     @GetMapping("/all")
