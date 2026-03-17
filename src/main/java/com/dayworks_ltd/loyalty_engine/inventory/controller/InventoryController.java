@@ -11,6 +11,7 @@ import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleItemRequest;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleRequest;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.StockRequest;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.UpdateItemRequest;
+import com.dayworks_ltd.loyalty_engine.inventory.models.DefaultProduct;
 import com.dayworks_ltd.loyalty_engine.inventory.models.DailySalesSummary;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Expense;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Inventory;
@@ -18,6 +19,7 @@ import com.dayworks_ltd.loyalty_engine.inventory.models.SaleTransaction;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.DailySalesSummaryRepository;
 
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.ExpenseRepository;
+import com.dayworks_ltd.loyalty_engine.inventory.repositories.DefaultProductRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.SaleTransactionRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.services.InventoryService;
 import com.dayworks_ltd.loyalty_engine.merchants.Merchant;
@@ -72,6 +74,7 @@ public class InventoryController {
     @Autowired
     private SaleTransactionRepository saleTransactionRepository;
     private final ExpenseRepository expenseRepository;
+    private final DefaultProductRepository defaultProductRepository;
 
 
     @Autowired
@@ -97,10 +100,17 @@ public class InventoryController {
     @Autowired
     private MerchantService merchantService;
 
-    public InventoryController(ExpenseRepository expenseRepository) {
+    public InventoryController(ExpenseRepository expenseRepository, DefaultProductRepository defaultProductRepository) {
         this.expenseRepository = expenseRepository;
+        this.defaultProductRepository = defaultProductRepository;
     }
 
+    // --- Default product templates ---
+    @GetMapping("/product-defaults")
+    public ResponseEntity<List<DefaultProduct>> getAllDefaultProducts() {
+        return ResponseEntity.ok(defaultProductRepository.findAll());
+    }
+    
     @GetMapping("/all")
     @Operation(summary = "Get All Inventory Items", description = "get all inventory items for specified merchant Id")
     public ResponseEntity<?> getAllItems(@AuthenticationPrincipal CustomUserDetails customUserDetails, @RequestParam String merchantId, @RequestHeader("Authorization") String authToken) {  // ← This is actually the USER ID
