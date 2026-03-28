@@ -7,11 +7,7 @@ import com.dayworks_ltd.loyalty_engine.auth.services.CustomUserDetailsService;
 import com.dayworks_ltd.loyalty_engine.auth.services.JWTService;
 import com.dayworks_ltd.loyalty_engine.campaign.service.Campaign;
 import com.dayworks_ltd.loyalty_engine.campaigns.CampaignService;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.DefaultProductDto;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleItemRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.StockRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.UpdateItemRequest;
+import com.dayworks_ltd.loyalty_engine.inventory.DTO.*;
 import com.dayworks_ltd.loyalty_engine.inventory.models.DefaultProduct;
 import com.dayworks_ltd.loyalty_engine.inventory.models.DailySalesSummary;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Expense;
@@ -108,16 +104,88 @@ public class InventoryController {
 
     // --- Default product templates ---
     @GetMapping("/product-defaults")
-    public ResponseEntity<List<DefaultProductDto>> getAllDefaultProducts() {
-        List<DefaultProductDto> list = defaultProductRepository.findAll()
-                .stream()
-                .map(p -> DefaultProductDto.builder()
-                        .productName(p.getProductName())
-                        .productCode(p.getProductCode())
-                        .volumeMl(p.getVolume_Ml())
-                        .build())
-                .toList();
-        return ResponseEntity.ok(list);
+    @Operation(summary = "Get all default products",
+            description = "Returns the list of default products available system-wide. "
+                    + "Requires authenticated user with a linked merchant.")
+    public ResponseEntity<?> getAllDefaultProducts(
+            @AuthenticationPrincipal CustomUserDetails customUserDetails) {
+
+        Logger logger = LoggerFactory.getLogger(getClass());
+
+        try {
+            if (customUserDetails == null) {
+                logger.warn("No authenticated user found for /product-defaults");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "status", "FAILURE",
+                        "statusCode", 401,
+                        "message", "Authentication required"
+                ));
+            }
+
+            logger.info("User authenticated: {}", customUserDetails.getUsername());
+
+            Long userId = customUserDetails.getUserId();
+            User user = userRepository.getUserById(userId);
+
+            if (user == null) {
+                logger.warn("User not found in DB for ID: {}", userId);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                        "status", "FAILURE",
+                        "statusCode", 401,
+                        "message", "User not found"
+                ));
+            }
+
+            String merchantId = user.getMerchantId();
+
+            if (merchantId == null || merchantId.isBlank()) {
+                logger.warn("User {} has no linked merchant", user.getUsername());
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "statusCode", 400,
+                        "message", "This user is not linked to any merchant"
+                ));
+            }
+
+            logger.info("Fetching default products for merchant-linked user: {} (merchantId: {})",
+                    user.getUsername(), merchantId);
+
+            // Fetch all default products (they are system-wide, not merchant-specific)
+            List<DefaultProduct> defaultProducts = defaultProductRepository.findAll();
+
+            if (defaultProducts.isEmpty()) {
+                logger.info("No default products found in database");
+            }
+
+            // Map to DTO
+            List<DefaultProductDto> result = defaultProducts.stream()
+                    .map(p -> DefaultProductDto.builder()
+                            .productName(p.getProductName())
+                            .productCode(p.getProductCode())
+                            .volumeMl(p.getVolume_Ml())
+                            .build())
+                    .toList();
+
+            // Option 1: Return plain list (simple & clean)
+            // return ResponseEntity.ok(result);
+
+            // Option 2: Return consistent wrapped response (recommended to match your other endpoints)
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "statusCode", 200,
+                    "message", "Default products retrieved successfully",
+                    "data", result,
+                    "count", result.size()
+            ));
+
+        } catch (Exception e) {
+            logger.error("Error fetching default products", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "statusCode", 500,
+                    "message", "Failed to retrieve default products: " + e.getMessage()
+            ));
+        }
     }
     
     @GetMapping("/all")
@@ -169,14 +237,78 @@ public class InventoryController {
             ));
         }
     }
+    @PostMapping("/batch-add-defaults")
+    @Operation(summary = "Batch add selected default products to inventory",
+            description = "Creates new inventory items from selected default products. "
+                    + "merchantId in body is actually the USER ID — real merchant is resolved from DB.")
+    public ResponseEntity<Map<String, Object>> batchAddDefaultProducts(
+            @RequestBody BatchAddDefaultsRequest request) {
 
-//    @GetMapping("/all")
-//    @Operation(summary = "Get All Inventory Items", description = "get all inventory items for specified merchant Id")
-//    public ResponseEntity<List<Inventory>> getAllItems(@RequestParam String merchantId) {
-////        return ResponseEntity.ok(inventoryService.getAllItems());
-//        System.out.println("Fetching inventory for merchant: " + merchantId);
-//        return ResponseEntity.ok(inventoryService.getAllItemsForMerchant(merchantId));
-//    }
+        Map<String, Object> response = new HashMap<>();
+
+        try {
+            String userIdStr = request.getMerchantId();
+            if (userIdStr == null || userIdStr.trim().isEmpty()) {
+                response.put("status", "FAILURE");
+                response.put("statusCode", 400);
+                response.put("message", "merchantId (user ID) is required");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            Long userId;
+            try {
+                userId = Long.parseLong(userIdStr.trim());
+            } catch (NumberFormatException e) {
+                response.put("status", "FAILURE");
+                response.put("statusCode", 400);
+                response.put("message", "Invalid user ID format");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty()) {
+                response.put("status", "FAILURE");
+                response.put("statusCode", 400);
+                response.put("message", "No user with specified ID exists");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            String realMerchantId = userOpt.get().getMerchantId();
+            if (realMerchantId == null || realMerchantId.trim().isEmpty()) {
+                response.put("status", "FAILURE");
+                response.put("statusCode", 400);
+                response.put("message", "This user is not linked to any merchant");
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // Logging for debugging (same style as your other endpoints)
+            System.out.println("BATCH-ADD-DEFAULTS - Incoming userId: " + userIdStr +
+                    " → Resolved to real merchantId: " + realMerchantId);
+
+            // Process the list
+            BatchAddResult result = inventoryService.batchAddFromDefaults(
+                    request.getSelections(), realMerchantId);
+
+            response.put("status", "SUCCESS");
+            response.put("statusCode", 200);
+            response.put("message", String.format("Batch add completed: %d added, %d skipped (already exist)",
+                    result.getAddedCount(), result.getSkippedCount()));
+            response.put("addedCount", result.getAddedCount());
+            response.put("skippedCount", result.getSkippedCount());
+            response.put("totalProcessed", request.getSelections().size());
+
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            response.put("status", "ERROR");
+            response.put("statusCode", 500);
+            response.put("message", "Failed to batch add default products: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+
 
     @PostMapping("/import")
     @Operation(summary = "Upload Inventory via CSV", description = "Update Inventory via CSV list of items")

@@ -31,6 +31,9 @@ public class SupplierInvoice {
     @Column(nullable = false)
     private Long merchantId;  // FK to merchants
 
+    @Column
+    private Integer matchScore; // 0–100
+
     @Column(nullable = false)
     private Long supplierId;  // FK to suppliers
 
@@ -39,6 +42,9 @@ public class SupplierInvoice {
 
     @Column(nullable = false)
     private LocalDate invoiceDate;  // 2025-12-18
+
+    @Column( nullable = false)
+    private boolean kraApproved = false;
 
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;  // 15060.34
@@ -88,6 +94,43 @@ public class SupplierInvoice {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+//    @Column(length = 100)
+//    private String etimsInvoiceNo;
+
+//    @Column(length = 100)
+//    private String etimsSerialNo;
+
+    @Column(length = 20)
+    private String kraSupplierPin;
+
+    @Column
+    private String supplierName;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal kraTotalAmount;
+
+    @Column
+    private LocalDateTime kraInvoiceDate;
+
+    @Column(length = 100)
+    private String kraDeviceSerial;
+
+    @Column(length = 100)
+    private String kraControlUnitInvoiceNo;
+
+    @Column(length = 100)
+    private String kraTraderInvoiceNo;
+    // ==============================
+    // VALIDATION FLAGS (BEHAVIOR SIGNALS)
+    // ==============================
+    @Column
+    private boolean duplicateSuspected;
+    @Column
+    private boolean supplierMismatch;
+    @Column
+    private boolean amountMismatch;
+    @Column
+    private boolean dateMismatch;
 
     @PrePersist
     protected void onCreate() {

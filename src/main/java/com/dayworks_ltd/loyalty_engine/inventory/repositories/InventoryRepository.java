@@ -2,6 +2,8 @@ package com.dayworks_ltd.loyalty_engine.inventory.repositories;
 
 import com.dayworks_ltd.loyalty_engine.inventory.models.Inventory;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -40,5 +42,14 @@ public interface InventoryRepository extends JpaRepository<Inventory, Long> {
 
 
     List<Inventory> findByMerchantIdAndIsActive(String merchantId, Boolean isActive);
+
+    boolean existsByMerchantIdAndItemName(String merchantId, String itemName);
+
+    // Optional: case-insensitive version (very useful for names)
+    @Query("SELECT COUNT(i) > 0 FROM Inventory i " +
+            "WHERE i.merchantId = :merchantId AND LOWER(i.itemName) = LOWER(:itemName)")
+    boolean existsByMerchantIdAndItemNameIgnoreCase(
+            @Param("merchantId") String merchantId,
+            @Param("itemName") String itemName);
 
 }

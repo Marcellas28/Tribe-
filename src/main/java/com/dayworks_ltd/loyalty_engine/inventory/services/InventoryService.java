@@ -1,9 +1,6 @@
 package com.dayworks_ltd.loyalty_engine.inventory.services;
 
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleItemRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.SaleRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.StockItemRequest;
-import com.dayworks_ltd.loyalty_engine.inventory.DTO.StockRequest;
+import com.dayworks_ltd.loyalty_engine.inventory.DTO.*;
 import com.dayworks_ltd.loyalty_engine.inventory.models.DailySalesSummary;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Expense;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Inventory;
@@ -196,6 +193,62 @@ public class InventoryService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to import file: " + e.getMessage(), e);
         }
+    }
+
+    @Transactional
+    public BatchAddResult batchAddFromDefaults(List<DefaultProductSelectionDto> selections, String merchantId) {
+        logger.info("batchAddFromDefaults | merchantId={} | itemCount={}", merchantId, selections != null ? selections.size() : 0);
+
+        int added = 0;
+        int skipped = 0;
+        LocalDate today = LocalDate.now();
+
+        for (DefaultProductSelectionDto sel : selections) {
+            String name = (sel.getProductName() != null) ? sel.getProductName().trim() : "";
+            String code = (sel.getProductCode() != null) ? sel.getProductCode().trim() : "";
+
+            if (name.isEmpty() || code.isEmpty()) {
+                skipped++;
+                continue;
+            }
+
+            String itemCode = merchantId + "-" + code.toUpperCase();
+
+            if (inventoryRepository.existsByMerchantIdAndItemName(merchantId, itemCode)) {
+                skipped++;
+                continue;
+            }
+
+            Inventory newItem = Inventory.builder()
+                    .merchantId(merchantId)
+                    .itemName(name)
+                    .itemCode(itemCode)
+
+                    // ── New logic for stock and price ─────────────────────────────────────
+                    .startingStock(sel.getStartingStock() != null ? sel.getStartingStock() : 0)
+                    .addedStock(0)
+                    .soldStock(0)
+                    .availableStock(sel.getStartingStock() != null ? sel.getStartingStock() : 0)
+                    .closingStock(sel.getStartingStock() != null ? sel.getStartingStock() : 0)
+
+                    .unitPrice(sel.getUnitPrice() != null ? sel.getUnitPrice() : BigDecimal.ZERO)
+                    .unitCost(BigDecimal.ZERO)  // still default – or make optional later
+
+                    .totalSales(BigDecimal.ZERO)
+                    .grossSales(BigDecimal.ZERO)
+                    .netlSales(BigDecimal.ZERO)
+                    .deductions(BigDecimal.ZERO)
+                    .recordDate(today)
+                    .isActive(true)
+                    .reorderLevel(10)
+                    .lastUpdated(LocalDateTime.now())
+                    .build();
+
+            inventoryRepository.save(newItem);
+            added++;
+        }
+
+        return new BatchAddResult(added, skipped);
     }
 
    @Transactional
