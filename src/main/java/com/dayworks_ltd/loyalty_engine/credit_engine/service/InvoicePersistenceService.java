@@ -60,6 +60,7 @@ public class InvoicePersistenceService {
                 .merchantId(merchantId)
                 .supplierId(supplier.getId())
                 .invoiceNumber(invoiceData.getInvoiceNumber())
+                .kraControlUnitInvoiceNo(invoiceData.getCuin())
                 .invoiceDate(invoiceData.getDate())              // already LocalDate — no parse needed
                 .subtotal(invoiceData.getSubtotal())             // already BigDecimal
                 .vat(invoiceData.getVat())                       // already BigDecimal
