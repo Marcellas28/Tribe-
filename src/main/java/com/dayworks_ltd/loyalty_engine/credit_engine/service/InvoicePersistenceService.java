@@ -64,9 +64,13 @@ public class InvoicePersistenceService {
                 .invoiceDate(invoiceData.getDate())              // already LocalDate — no parse needed
                 .subtotal(invoiceData.getSubtotal())             // already BigDecimal
                 .vat(invoiceData.getVat())                       // already BigDecimal
-                .total(invoiceData.getTotal())                   // already BigDecimal
+                .total(invoiceData.getTotal())
+                .kraVerificationStatus("PENDING")
+                .kraVerificationAttempts(0)
+                .kraApproved(false)// already BigDecimal
                 .ocrConfidence(data.getConfidence())             // already BigDecimal
                 .submissionId(submissionId)
+
                 .build();
 
         // generateHash() is also called in @PrePersist, but calling it
