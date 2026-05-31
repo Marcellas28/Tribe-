@@ -1,6 +1,7 @@
 package com.dayworks_ltd.loyalty_engine.orders.models;
 
 import com.dayworks_ltd.loyalty_engine.common.OrderStatus;
+import com.dayworks_ltd.loyalty_engine.inventory.models.StockTransfer;
 import com.dayworks_ltd.loyalty_engine.merchants.Merchant;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -57,6 +58,28 @@ public class Order {
     //  CRITICAL FIX: Initialize the list
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "stock_transfer_id")
+    private StockTransfer stockTransfer;
+
+    @Column(name = "fulfilled_date")
+    private LocalDateTime fulfilledDate;
+
+    @Column(name = "received_date")
+    private LocalDateTime receivedDate;
+
+    // Add this helper method
+    public void markAsFulfilled(StockTransfer stockTransfer) {
+        this.stockTransfer = stockTransfer;
+        this.fulfilledDate = LocalDateTime.now();
+        this.status = OrderStatus.FULFILLED;
+    }
+
+    public void markAsReceived() {
+        this.status = OrderStatus.RECEIVED;
+        this.receivedDate = LocalDateTime.now();
+    }
 
     // Helper method to safely add items
     public void addItem(OrderItem item) {

@@ -4,6 +4,7 @@ package com.dayworks_ltd.loyalty_engine.orders.controller;
 import com.dayworks_ltd.loyalty_engine.auth.model.CustomUserDetails;
 import com.dayworks_ltd.loyalty_engine.auth.model.User;
 import com.dayworks_ltd.loyalty_engine.auth.repository.UserRepository;
+import com.dayworks_ltd.loyalty_engine.inventory.models.StockTransfer;
 import com.dayworks_ltd.loyalty_engine.orders.dto.OrderRequest;
 import com.dayworks_ltd.loyalty_engine.orders.models.Order;
 import com.dayworks_ltd.loyalty_engine.orders.services.OrderService;
@@ -193,6 +194,95 @@ public class OrderController {
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "ERROR",
                     "message", "Failed to fetch pending orders"
+            ));
+        }
+    }
+
+    @PostMapping("/{orderCode}/fulfill")
+    @Operation(summary = "Distributor fulfills a paid order")
+    public ResponseEntity<?> fulfillOrder(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String orderCode) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of("status", "ERROR", "message", "Unauthorized"));
+        }
+
+        try {
+            Long userId = userDetails.getUserId();
+            User user = userRepository.getUserById(userId);
+            String distributorId = user.getMerchantId();
+
+            StockTransfer transfer = orderService.fulfillOrder(orderCode, distributorId, userId);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "Order fulfilled successfully",
+                    "orderCode", orderCode,
+                    "transferCode", transfer.getTransferCode()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "FAILURE",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/{orderCode}/receive")
+    @Operation(summary = "Merchant confirms stock receipt by entering order code from receipt")
+    public ResponseEntity<?> receiveOrder(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable String orderCode) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "status", "ERROR",
+                    "message", "Unauthorized"
+            ));
+        }
+
+        try {
+            Long userId = userDetails.getUserId();
+            Optional<User> userOpt = userRepository.findById(userId);
+
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User not found"
+                ));
+            }
+
+            User user = userOpt.get();
+            String merchantId = user.getMerchantId();
+
+            if (merchantId == null || merchantId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User is not linked to any merchant"
+                ));
+            }
+
+            Order order = orderService.receiveOrder(orderCode, merchantId);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "Stock received successfully",
+                    "orderCode", orderCode,
+                    "receivedDate", order.getReceivedDate().toString()
+            ));
+
+        } catch (IllegalArgumentException e) {
+            logger.warn("Receive order failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "FAILURE",
+                    "message", e.getMessage()
+            ));
+        } catch (Exception e) {
+            logger.error("Error receiving order", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", "Failed to receive order"
             ));
         }
     }

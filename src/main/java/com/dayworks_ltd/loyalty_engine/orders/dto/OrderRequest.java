@@ -12,5 +12,4 @@ public class OrderRequest {
 
     // Payment Info
     private String phoneNumber;      // Must be in format 2547xxxxxxxx
-    private BigDecimal amount;       // Must match total of items
 }

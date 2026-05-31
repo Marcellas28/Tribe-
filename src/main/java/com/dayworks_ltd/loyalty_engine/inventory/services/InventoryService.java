@@ -410,6 +410,11 @@ public List<Inventory> addMultipleStock(StockRequest request, String realMerchan
         return item;
     }
 
+    public Inventory getInventoryByMerchantIdAndItemCode(String merchantId, String itemCode) {
+        return inventoryRepository.findByMerchantIdAndItemCode(merchantId, itemCode)
+                .orElse(null);
+    }
+
 
 @Transactional
 public Map<String, Object> closeDay(String merchantId) {

@@ -20,6 +20,8 @@ import com.dayworks_ltd.loyalty_engine.inventory.repositories.ExpenseRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.DefaultProductRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.SaleTransactionRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.services.InventoryService;
+import com.dayworks_ltd.loyalty_engine.inventory.services.ProductPerformanceService;
+
 import com.dayworks_ltd.loyalty_engine.merchants.Merchant;
 import com.dayworks_ltd.loyalty_engine.merchants.MerchantService;
 import com.dayworks_ltd.loyalty_engine.payments.PaymentService;
@@ -73,6 +75,7 @@ public class InventoryController {
     private SaleTransactionRepository saleTransactionRepository;
     private final ExpenseRepository expenseRepository;
     private final DefaultProductRepository defaultProductRepository;
+    private final ProductPerformanceService productPerformanceService;
 
 
     @Autowired
@@ -98,9 +101,10 @@ public class InventoryController {
     @Autowired
     private MerchantService merchantService;
 
-    public InventoryController(ExpenseRepository expenseRepository, DefaultProductRepository defaultProductRepository) {
+    public InventoryController(ExpenseRepository expenseRepository, DefaultProductRepository defaultProductRepository, ProductPerformanceService productPerformanceService) {
         this.expenseRepository = expenseRepository;
         this.defaultProductRepository = defaultProductRepository;
+        this.productPerformanceService = productPerformanceService;
     }
 
     @GetMapping("/product-defaults")
@@ -1023,6 +1027,32 @@ public ResponseEntity<?> getMerchantReport(@PathVariable Long merchantId) {  // 
 
             // Step 3: Save all sale lines
             saleTransactionRepository.saveAll(saleTransactions);
+
+
+
+            // Step 3.5: Update ProductPerformance
+
+            for (SaleTransaction transaction : saleTransactions) {
+                try {
+                    Inventory inventory = inventoryService.getInventoryByMerchantIdAndItemCode(
+                            merchantId, transaction.getItemCode());
+
+                    if (inventory != null) {
+                        productPerformanceService.updatePerformance(
+                                inventory,
+                                transaction.getQuantity(),
+                                transaction.getDiscount()
+                        );
+                    } else {
+                        log.warn("ProductPerformance skipped — item not found: {}", transaction.getItemCode());
+                    }
+                } catch (Exception e) {
+                    log.warn("ProductPerformance update failed for item {}: {}",
+                            transaction.getItemCode(), e.getMessage());
+                }
+            }
+
+
 
             // Step 4: Update DailySalesSummary with final totalAmount
             DailySalesSummary summary = dailySalesSummaryRepository
