@@ -4,9 +4,16 @@ package com.dayworks_ltd.loyalty_engine.orders.controller;
 import com.dayworks_ltd.loyalty_engine.auth.model.CustomUserDetails;
 import com.dayworks_ltd.loyalty_engine.auth.model.User;
 import com.dayworks_ltd.loyalty_engine.auth.repository.UserRepository;
+import com.dayworks_ltd.loyalty_engine.common.OrderStatus;
 import com.dayworks_ltd.loyalty_engine.inventory.models.StockTransfer;
+import com.dayworks_ltd.loyalty_engine.merchants.Merchant;
+import com.dayworks_ltd.loyalty_engine.merchants.MerchantService;
+import com.dayworks_ltd.loyalty_engine.orders.dto.MerchantSummaryDTO;
+import com.dayworks_ltd.loyalty_engine.orders.dto.OrderItemDTO;
 import com.dayworks_ltd.loyalty_engine.orders.dto.OrderRequest;
+import com.dayworks_ltd.loyalty_engine.orders.dto.OrderResponseDTO;
 import com.dayworks_ltd.loyalty_engine.orders.models.Order;
+import com.dayworks_ltd.loyalty_engine.orders.models.OrderItem;
 import com.dayworks_ltd.loyalty_engine.orders.services.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -21,12 +28,13 @@ import java.util.Map;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
 public class OrderController {
 
     private final OrderService orderService;
     private final UserRepository userRepository;
+    private final MerchantService merchantService;
 
     private static final Logger logger = LoggerFactory.getLogger(OrderController.class);
 
@@ -286,4 +294,228 @@ public class OrderController {
             ));
         }
     }
+
+    @GetMapping("/wholesalers/liquor")
+    @Operation(summary = "Get all Liquor Wholesalers")
+    public ResponseEntity<?> getLiquorWholesalers() {
+        try {
+            List<Merchant> wholesalers = merchantService.getLiquorWholesalers();
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "count", wholesalers.size(),
+                    "data", wholesalers
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", "Failed to fetch liquor wholesalers"
+            ));
+        }
+    }
+
+    @GetMapping("/merchant/status/{status}")
+    public ResponseEntity<?> getMerchantOrdersByStatus(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable OrderStatus status) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "status", "ERROR",
+                    "message", "Unauthorized"
+            ));
+        }
+
+        try {
+            Long userId = userDetails.getUserId();
+            Optional<User> userOpt = userRepository.findById(userId);
+
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User not found"
+                ));
+            }
+
+            String merchantId = userOpt.get().getMerchantId();
+
+            if (merchantId == null || merchantId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User is not linked to any merchant"
+                ));
+            }
+
+            List<Order> orders = orderService.getOrdersByMerchantAndStatus(merchantId, status);
+
+            List<OrderResponseDTO> responseData = orders.stream()
+                    .map(this::mapToOrderResponseDTO)
+                    .toList();
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "role", "MERCHANT",
+                    "filterStatus", status.name(),
+                    "count", responseData.size(),
+                    "data", responseData
+            ));
+
+        } catch (Exception e) {
+            logger.error("Error fetching merchant orders", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", "Failed to fetch orders"
+            ));
+        }
+    }
+
+    @GetMapping("/distributor/status/{status}")
+    public ResponseEntity<?> getDistributorOrdersByStatus(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable OrderStatus status) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of(
+                    "status", "ERROR",
+                    "message", "Unauthorized"
+            ));
+        }
+
+        try {
+            Long userId = userDetails.getUserId();
+            Optional<User> userOpt = userRepository.findById(userId);
+
+            if (userOpt.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User not found"
+                ));
+            }
+
+            String merchantId = userOpt.get().getMerchantId();
+
+            if (merchantId == null || merchantId.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "User is not linked to any distributor"
+                ));
+            }
+
+            List<Order> orders = orderService.getOrdersByDistributorAndStatus(merchantId, status);
+
+            List<OrderResponseDTO> responseData = orders.stream()
+                    .map(this::mapToOrderResponseDTO)
+                    .toList();
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "role", "DISTRIBUTOR",
+                    "filterStatus", status.name(),
+                    "count", responseData.size(),
+                    "data", responseData
+            ));
+
+        } catch (Exception e) {
+            logger.error("Error fetching distributor orders", e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", "Failed to fetch orders"
+            ));
+        }
+    }
+
+    private ResponseEntity<?> getOrdersByRoleAndStatus(
+            CustomUserDetails userDetails, OrderStatus status, boolean isDistributor) {
+
+        if (userDetails == null) {
+            return ResponseEntity.status(401).body(Map.of("status", "ERROR", "message", "Unauthorized"));
+        }
+
+        try {
+            String merchantId = getMerchantIdFromUser(userDetails);
+            List<Order> orders;
+
+            if (isDistributor) {
+                orders = orderService.getOrdersByDistributorAndStatus(merchantId, status);
+            } else {
+                orders = orderService.getOrdersByMerchantAndStatus(merchantId, status);
+            }
+
+            String role = isDistributor ? "DISTRIBUTOR" : "MERCHANT";
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "role", role,
+                    "filterStatus", status.name(),
+                    "count", orders.size(),
+                    "data", orders
+            ));
+
+        } catch (Exception e) {
+            logger.error("Error fetching orders for {} with status {}",
+                    isDistributor ? "distributor" : "merchant", status, e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    private String getMerchantIdFromUser(CustomUserDetails userDetails) {
+        Long userId = userDetails.getUserId();
+        Optional<User> userOpt = userRepository.findById(userId);
+
+        if (userOpt.isEmpty() || userOpt.get().getMerchantId() == null ||
+                userOpt.get().getMerchantId().isBlank()) {
+            throw new IllegalArgumentException("Merchant ID not found for this user");
+        }
+
+        return userOpt.get().getMerchantId();
+    }
+
+
+    private OrderResponseDTO mapToOrderResponseDTO(Order order) {
+        return OrderResponseDTO.builder()
+                .id(order.getId())
+                .orderCode(order.getOrderCode())
+                .orderDate(order.getOrderDate())
+                .paymentDate(order.getPaymentDate())
+                .status(order.getStatus() != null ? order.getStatus().name() : null)
+                .totalAmount(order.getTotalAmount())
+                .phoneNumber(order.getPhoneNumber())
+                .checkoutRequestId(order.getCheckoutRequestId())
+                .paymentReference(order.getPaymentReference())
+                .merchant(mapMerchantSummary(order.getMerchant()))
+                .distributor(mapMerchantSummary(order.getDistributor()))
+                .items(order.getItems() != null ?
+                        order.getItems().stream().map(this::mapOrderItem).toList() : List.of())
+                .build();
+    }
+
+    private MerchantSummaryDTO mapMerchantSummary(Merchant merchant) {
+        if (merchant == null) return null;
+        return MerchantSummaryDTO.builder()
+                .id(merchant.getId())
+                .businessName(merchant.getBusinessName())
+                .businessType(merchant.getBusinessType())
+                .location(merchant.getLocation())
+                .tillNumber(merchant.getTillNumber())
+                .businessPhone(merchant.getBusinessPhone())
+                .build();
+    }
+
+    private OrderItemDTO mapOrderItem(OrderItem item) {
+        return OrderItemDTO.builder()
+                .id(item.getId())
+                .itemCode(item.getItemCode())
+                .itemName(item.getItemName())
+                .quantity(item.getQuantity())
+                .wholesalePrice(item.getWholesalePrice())
+                .lineTotal(item.getLineTotal())
+                .build();
+    }
+
+
+
+
 }

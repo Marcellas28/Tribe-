@@ -9,16 +9,9 @@ import com.dayworks_ltd.loyalty_engine.auth.services.JWTService;
 import com.dayworks_ltd.loyalty_engine.campaign.service.Campaign;
 import com.dayworks_ltd.loyalty_engine.campaigns.CampaignService;
 import com.dayworks_ltd.loyalty_engine.inventory.DTO.*;
-import com.dayworks_ltd.loyalty_engine.inventory.models.DefaultProduct;
-import com.dayworks_ltd.loyalty_engine.inventory.models.DailySalesSummary;
-import com.dayworks_ltd.loyalty_engine.inventory.models.Expense;
-import com.dayworks_ltd.loyalty_engine.inventory.models.Inventory;
-import com.dayworks_ltd.loyalty_engine.inventory.models.SaleTransaction;
-import com.dayworks_ltd.loyalty_engine.inventory.repositories.DailySalesSummaryRepository;
+import com.dayworks_ltd.loyalty_engine.inventory.models.*;
+import com.dayworks_ltd.loyalty_engine.inventory.repositories.*;
 
-import com.dayworks_ltd.loyalty_engine.inventory.repositories.ExpenseRepository;
-import com.dayworks_ltd.loyalty_engine.inventory.repositories.DefaultProductRepository;
-import com.dayworks_ltd.loyalty_engine.inventory.repositories.SaleTransactionRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.services.InventoryService;
 import com.dayworks_ltd.loyalty_engine.inventory.services.ProductPerformanceService;
 
@@ -30,6 +23,7 @@ import com.dayworks_ltd.loyalty_engine.utility.LoyaltyUtil;
 import com.dayworks_ltd.loyalty_engine.utility.Pair;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -76,6 +70,8 @@ public class InventoryController {
     private final ExpenseRepository expenseRepository;
     private final DefaultProductRepository defaultProductRepository;
     private final ProductPerformanceService productPerformanceService;
+    private final RecurringExpenseRepository recurringExpenseRepository;
+
 
 
     @Autowired
@@ -101,10 +97,11 @@ public class InventoryController {
     @Autowired
     private MerchantService merchantService;
 
-    public InventoryController(ExpenseRepository expenseRepository, DefaultProductRepository defaultProductRepository, ProductPerformanceService productPerformanceService) {
+    public InventoryController(ExpenseRepository expenseRepository, DefaultProductRepository defaultProductRepository, ProductPerformanceService productPerformanceService, RecurringExpenseRepository recurringExpenseRepository) {
         this.expenseRepository = expenseRepository;
         this.defaultProductRepository = defaultProductRepository;
         this.productPerformanceService = productPerformanceService;
+        this.recurringExpenseRepository = recurringExpenseRepository;
     }
 
     @GetMapping("/product-defaults")
@@ -898,6 +895,62 @@ public class InventoryController {
                     "status", "ERROR",
                     "statusCode", 500,
                     "message", "Failed to retrieve expenses: " + e.getMessage()
+            ));
+        }
+    }
+
+    @PostMapping("/recurring")
+    @Operation(summary = "Create Recurring Expense (Standing Order)")
+    public ResponseEntity<?> createRecurringExpense(
+            @RequestParam String merchantId,           // or use authenticated user like before
+            @Valid @RequestBody RecurringExpenseRequest request) {
+
+        try {
+            // Optional: Validate merchant exists
+            Optional<User> userOpt = userRepository.findById(Long.parseLong(merchantId));
+            if (userOpt.isEmpty() || userOpt.get().getMerchantId() == null) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "FAILURE",
+                        "message", "Invalid merchant"
+                ));
+            }
+
+            String realMerchantId = userOpt.get().getMerchantId();
+
+            RecurringExpense recurringExpense = inventoryService.createRecurringExpense(realMerchantId, request);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "message", "Recurring expense created successfully",
+                    "recurringExpenseId", recurringExpense.getId(),
+                    "nextExecutionDate", recurringExpense.getNextExecutionDate(),
+                    "frequency", recurringExpense.getFrequency()
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", e.getMessage()
+            ));
+        }
+    }
+
+    @GetMapping("/recurring")
+    @Operation(summary = "Get all active recurring expenses for a merchant")
+    public ResponseEntity<?> getRecurringExpenses(@RequestParam String merchantId) {
+        try {
+            List<RecurringExpense> expenses = recurringExpenseRepository
+                    .findByMerchantIdAndIsActiveTrue(merchantId);
+
+            return ResponseEntity.ok(Map.of(
+                    "status", "SUCCESS",
+                    "count", expenses.size(),
+                    "data", expenses
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "ERROR",
+                    "message", "Failed to fetch recurring expenses"
             ));
         }
     }

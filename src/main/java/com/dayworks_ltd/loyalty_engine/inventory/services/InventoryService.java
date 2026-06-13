@@ -5,13 +5,17 @@ import com.dayworks_ltd.loyalty_engine.inventory.DTO.*;
 import com.dayworks_ltd.loyalty_engine.inventory.models.DailySalesSummary;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Expense;
 import com.dayworks_ltd.loyalty_engine.inventory.models.Inventory;
+import com.dayworks_ltd.loyalty_engine.inventory.models.RecurringExpense;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.DailySalesSummaryRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.ExpenseRepository;
 import com.dayworks_ltd.loyalty_engine.inventory.repositories.InventoryRepository;
+import com.dayworks_ltd.loyalty_engine.inventory.repositories.RecurringExpenseRepository;
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -25,7 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-
+@Slf4j
 @Service
 public class InventoryService {
 
@@ -36,10 +40,13 @@ public class InventoryService {
 
     private final ExpenseRepository expenseRepository;
 
+    private final RecurringExpenseRepository recurringExpenseRepository;
+
     private final Logger logger = LoggerFactory.getLogger(InventoryService.class);
 
-    public InventoryService(ExpenseRepository expenseRepository) {
+    public InventoryService(ExpenseRepository expenseRepository, RecurringExpenseRepository recurringExpenseRepository) {
         this.expenseRepository = expenseRepository;
+        this.recurringExpenseRepository = recurringExpenseRepository;
     }
 
     public Inventory getInventoryItemById(Long id)
@@ -560,6 +567,56 @@ public Map<String, Object> closeDay(String merchantId) {
     }
 
 
+
+
+    @Transactional
+    public RecurringExpense createRecurringExpense(String merchantId, RecurringExpenseRequest request) {
+
+        RecurringExpense recurring = RecurringExpense.builder()
+                .merchantId(merchantId)
+                .amount(request.getAmount())
+                .narration(request.getNarration())
+                .frequency(request.getFrequency())
+                .startDate(request.getStartDate())
+                .endDate(request.getEndDate())
+                .nextExecutionDate(request.getStartDate())
+                .isActive(true)
+                .build();
+
+        return recurringExpenseRepository.save(recurring);
+    }
+    @Scheduled(cron = "0 0 1 * * *")   // Runs at 1:00 AM every day
+    @Transactional
+    public void processDueRecurringExpenses() {
+        log.info("Starting processing of due recurring expenses...");
+
+        LocalDate today = LocalDate.now();
+
+        List<RecurringExpense> dueExpenses = recurringExpenseRepository
+                .findDueRecurringExpenses(today);
+
+        int processed = 0;
+
+        for (RecurringExpense re : dueExpenses) {
+            try {
+                // Reuse existing logic - This is the key point you wanted
+                recordExpense(re.getMerchantId(), re.getAmount(), re.getNarration());
+
+                // Update next execution date
+                re.updateNextExecutionDate();
+                recurringExpenseRepository.save(re);
+
+                processed++;
+                log.info("Processed recurring expense ID: {} for merchant: {}",
+                        re.getId(), re.getMerchantId());
+
+            } catch (Exception e) {
+                log.error("Failed to process recurring expense ID: {}", re.getId(), e);
+            }
+        }
+
+        log.info("Completed recurring expenses processing. {} expenses executed.", processed);
+    }
 
 @Transactional
 public void recordExpense(String merchantId, BigDecimal amount, String narration) {

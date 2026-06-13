@@ -128,14 +128,14 @@ public class OrderService {
 
         try {
             Map<String, Object> confirmRequest = Map.of(
-                    "originatorConversationId", order.getCheckoutRequestId()
+                    "CheckoutRequestId", order.getCheckoutRequestId()
             );
 
             log.info("Checking payment status for Order: {} | CheckoutRequestID: {}",
                     orderCode, order.getCheckoutRequestId());
 
             ResponseEntity<Map> response = restTemplate.postForEntity(
-                    paymentBaseUrl + "/api/v1/payment/confirm-payment",
+                    paymentBaseUrl + "/api/v1/payment/check-stk-push-status",
                     confirmRequest,
                     Map.class
             );
@@ -194,6 +194,21 @@ public class OrderService {
 //        return orderRepository.findByDistributorIdAndStatus(distributorId, OrderStatus.PAID);
 //    }
 
+    /**
+     * Get orders for a Merchant by status
+     */
+    public List<Order> getOrdersByMerchantAndStatus(String merchantId, OrderStatus status) {
+        return orderRepository.findByMerchantIdAndStatus(
+                Long.parseLong(merchantId), status);
+    }
+
+    /**
+     * Get orders for a Distributor by status
+     */
+    public List<Order> getOrdersByDistributorAndStatus(String distributorId, OrderStatus status) {
+        return orderRepository.findByDistributorIdAndStatus(
+                Long.parseLong(distributorId), status);
+    }
     // ====================== Helpers ======================
 
     private String generateOrderCode() {
@@ -206,16 +221,24 @@ public class OrderService {
                 .map(item -> item.getWholesalePrice().multiply(BigDecimal.valueOf(item.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
+    private boolean isPaymentSuccessful(Map<String, Object> responseBody) {
+        if (responseBody == null) return false;
 
-    private boolean isPaymentSuccessful(Map responseBody) {
-        try {
-            if (responseBody == null || !responseBody.containsKey("data")) return false;
-            Map<String, Object> data = (Map<String, Object>) responseBody.get("data");
-            Object responseCode = data.get("ResponseCode");
-            return responseCode != null && ("0".equals(responseCode.toString()) || 0 == Double.parseDouble(responseCode.toString()));
-        } catch (Exception e) {
-            return false;
-        }
+        Object statusObj = responseBody.get("status");
+        if (statusObj == null) return false;
+
+        // status comes back as integer 200
+        int status = ((Number) statusObj).intValue();
+        if (status != 200) return false;
+
+        Map<String, Object> data = (Map<String, Object>) responseBody.get("data");
+        if (data == null) return false;
+
+        // ResultCode comes back as String "0"
+        Object resultCode = data.get("ResultCode");
+        if (resultCode == null) return false;
+
+        return "0".equals(resultCode.toString());
     }
 
     @Transactional

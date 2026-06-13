@@ -107,4 +107,8 @@ public class MerchantService {
         merchantRepository.deleteById(id);
     }
 
+    public List<Merchant> getLiquorWholesalers() {
+        return merchantRepository.findLiquorWholesalers("LIQUOR");
+    }
+
 }
