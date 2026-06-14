@@ -288,7 +288,10 @@ public class InventoryService {
                 throw new IllegalArgumentException("Not enough stock for " + item.getItemName());
             }
 
-            BigDecimal saleAmount = item.getUnitPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+            BigDecimal unitPrice = "WHOLESALE".equalsIgnoreCase(request.getOrderType())
+                ? (item.getWholesalePrice() != null ? item.getWholesalePrice() : item.getUnitPrice())
+                : item.getUnitPrice();
+            BigDecimal saleAmount = unitPrice.multiply(BigDecimal.valueOf(itemReq.getQuantity()));
             item.setSoldStock(newSold);
             item.setAvailableStock(newAvailable);
             item.setClosingStock(newAvailable);

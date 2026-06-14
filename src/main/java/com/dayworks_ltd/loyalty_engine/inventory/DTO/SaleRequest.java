@@ -8,5 +8,6 @@ import java.util.List;
 public class SaleRequest {
     private String merchantId;
     private String customerPhone;
+    private String orderType;  // "RETAIL" or "WHOLESALE"
     private List<SaleItemRequest> items;
 }

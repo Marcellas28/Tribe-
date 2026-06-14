@@ -1052,7 +1052,9 @@ public ResponseEntity<?> getMerchantReport(@PathVariable Long merchantId) {  // 
                     throw new IllegalArgumentException("Item not found with ID: " + itemReq.getInventoryId());
                 }
 
-                BigDecimal unitPrice = inventory.getUnitPrice() != null ? inventory.getUnitPrice() : BigDecimal.ZERO;
+                BigDecimal unitPrice = "WHOLESALE".equalsIgnoreCase(request.getOrderType())
+                    ? (inventory.getWholesalePrice() != null ? inventory.getWholesalePrice() : inventory.getUnitPrice())
+                    : inventory.getUnitPrice();
                 BigDecimal discount = itemReq.getDiscount() != null ? itemReq.getDiscount() : BigDecimal.ZERO;
 
                 // Calculate line total with discount/extra
